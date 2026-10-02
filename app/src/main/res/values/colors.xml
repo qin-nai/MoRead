@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  原生外壳的配色，取值与 Web 层的设计令牌一一对应（见 assets/reader/css/base.css）。
+  源色：#f9faf4 纸白 / #758ea2 雾蓝 / #cfd3d4 烟灰 / #cee0ba 苔绿
+-->
+<resources>
+    <color name="bg">#f9faf4</color>
+    <color name="bg_sunken">#f1f3ea</color>
+    <color name="surface">#ffffff</color>
+    <color name="surface_2">#f3f5ee</color>
+    <color name="border">#e3e6dd</color>
+    <color name="border_strong">#cfd3d4</color>
+
+    <color name="text">#2b3940</color>
+    <color name="text_2">#5f6f78</color>
+    <color name="text_3">#8d9aa1</color>
+
+    <color name="primary">#758ea2</color>
+    <color name="primary_ink">#4f6a80</color>
+    <color name="primary_soft">#e4ebf0</color>
+
+    <color name="accent">#cee0ba</color>
+    <color name="accent_ink">#5c7a45</color>
+
+    <!-- 删除这类不可撤销的操作。取值和 Web 层的 danger 令牌一致 -->
+    <color name="danger">#a3675a</color>
+
+    <!--
+      长按菜单背后那层压暗。和 Web 层的 overlay-soft 令牌同值。
+      比面板的 0.42 淡得多——卡片只是浮起来，不是要接管整个屏幕。
+    -->
+    <color name="overlay_soft">#26212e36</color>
+
+    <color name="divider">#dfe3da</color>
+
+    <!-- 图标底色固定用纸白，不跟随深色模式：桌面图标跟随系统变色反而会认不出来 -->
+    <color name="ic_launcher_background">#f9faf4</color>
+
+    <!--
+      阅读页窗口底色。刻意不走 values-night：主题是应用内的设置项，
+      用户可能选"浅色"而系统是深色，用配置限定的资源会取错值。
+      Java 侧按应用内设置二选一。
+    -->
+    <color name="reader_bg_light">#f9faf4</color>
+    <color name="reader_bg_dark">#151b1f</color>
+</resources>

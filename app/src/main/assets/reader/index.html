@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>墨读</title>
+<script>
+/* 页面内的脚本错误要能被看见，否则渲染坏了只能靠猜 */
+window.__errors = [];
+window.addEventListener('error', function (e) {
+  window.__errors.push(String(e && e.message || e));
+});
+window.addEventListener('unhandledrejection', function (e) {
+  window.__errors.push('promise: ' + String(e && e.reason));
+});
+</script>
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/ui.css">
+</head>
+<body>
+
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<!-- 卷首标题：刚进来时浮现，随即自行隐去；滚回顶部会再次出现。
+     没有顶栏之后，这是"我正在读什么"唯一的答案。 -->
+<div class="titletag" id="titleTag" aria-hidden="true"><span id="titleTagText"></span></div>
+
+<!-- ===================== 检索条 ===================== -->
+<div class="searchbar" id="searchbar">
+  <button class="icon-btn" id="btnSearchClose" aria-label="关闭检索">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+  </button>
+  <input id="searchInput" type="search" placeholder="在文档中查找" autocomplete="off" autocorrect="off" spellcheck="false">
+  <span class="search-count" id="searchCount"></span>
+  <button class="icon-btn" id="btnPrevHit" aria-label="上一处">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M18 15l-6-6-6 6"/></svg></span>
+  </button>
+  <button class="icon-btn" id="btnNextHit" aria-label="下一处">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></span>
+  </button>
+</div>
+
+<!-- ===================== 正文 ===================== -->
+<main class="page">
+  <article class="doc" id="doc"></article>
+</main>
+
+<!-- 宽屏常驻目录（900px 以上显示） -->
+<aside class="toc-rail" id="rail" aria-label="目录"></aside>
+
+<!-- ===================== 目录抽屉 ===================== -->
+<div class="scrim" id="scrim"></div>
+<nav class="drawer" id="drawer" aria-label="目录">
+  <div class="drawer-head">
+    <div class="drawer-kicker">目录</div>
+    <div class="drawer-title" id="drawerTitle"></div>
+  </div>
+  <div class="toc" id="toc"></div>
+</nav>
+
+<!-- ===================== 左侧工具栏 ===================== -->
+<!-- 平时完全不在屏幕上，从左缘往右拖才拉出来 -->
+<div class="scrim rail-scrim" id="railScrim"></div>
+<!-- 纯装饰的缘把手，不接事件，免得挡住正文左侧的链接 -->
+<div class="edge" id="edge" aria-hidden="true"><i></i></div>
+
+<nav class="navrail" id="navrail" aria-label="工具栏">
+  <div class="navrail-scroll">
+    <div class="navrail-group">
+      <button class="rail-item" id="navBack">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></span>
+        <span class="rail-label">返回</span>
+      </button>
+      <button class="rail-item" id="navToc">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg></span>
+        <span class="rail-label">目录</span>
+      </button>
+      <button class="rail-item" id="navSearch">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg></span>
+        <span class="rail-label">检索</span>
+      </button>
+    </div>
+
+    <div class="navrail-line"></div>
+
+    <div class="navrail-group">
+      <button class="rail-item" id="navEdit">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z"/><path d="M14 7l3 3"/></svg></span>
+        <span class="rail-label" id="navEditLabel">编辑</span>
+      </button>
+      <button class="rail-item" id="navSave">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+        <span class="rail-label">保存</span>
+      </button>
+    </div>
+
+    <div class="navrail-line"></div>
+
+    <div class="navrail-group">
+      <button class="rail-item" id="navCopy">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg></span>
+        <span class="rail-label">复制</span>
+      </button>
+      <button class="rail-item" id="navShare">
+        <span class="rail-ic"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.7l7.4-4.4M8.3 13.3l7.4 4.4"/></svg></span>
+        <span class="rail-label">分享</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="navrail-group navrail-foot">
+    <button class="rail-item" id="navSettings">
+      <span class="rail-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.4M12 18.6V21M4.9 6.5l1.7 1.7M17.4 15.8l1.7 1.7M3 12h2.4M18.6 12H21M4.9 17.5l1.7-1.7M17.4 8.2l1.7-1.7"/></svg></span>
+      <span class="rail-label">设置</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ===================== 编辑 ===================== -->
+<div class="editor" id="editor" aria-label="编辑">
+  <div class="editor-bar" id="editorBar">
+    <button class="md-btn" data-md="h">标题</button>
+    <button class="md-btn" data-md="b"><b>粗</b></button>
+    <button class="md-btn" data-md="i"><i>斜</i></button>
+    <button class="md-btn" data-md="del"><s>删</s></button>
+    <button class="md-btn" data-md="code">行内码</button>
+    <button class="md-btn" data-md="pre">代码块</button>
+    <button class="md-btn" data-md="quote">引用</button>
+    <button class="md-btn" data-md="ul">列表</button>
+    <button class="md-btn" data-md="ol">序号</button>
+    <button class="md-btn" data-md="task">待办</button>
+    <button class="md-btn" data-md="link">链接</button>
+    <button class="md-btn" data-md="img">图片</button>
+    <button class="md-btn" data-md="table">表格</button>
+    <button class="md-btn" data-md="hr">分割线</button>
+    <button class="md-btn" data-md="note">提示块</button>
+  </div>
+  <div class="editor-meta">
+    <span id="editorStat">0 字</span>
+    <span class="editor-dot">·</span>
+    <span id="editorState">已保存</span>
+  </div>
+  <textarea class="editor-area" id="editorArea" spellcheck="false"
+            autocapitalize="off" autocorrect="off" autocomplete="off"></textarea>
+</div>
+
+<!-- ===================== 阅读设置 ===================== -->
+<div class="sheet" id="sheet" role="dialog" aria-label="阅读设置">
+  <div class="sheet-grip"></div>
+  <div class="sheet-body">
+
+    <div class="row">
+      <div class="row-head"><span class="row-label">主题</span></div>
+      <div class="seg" id="segTheme">
+        <button data-v="light" type="button">浅色</button>
+        <button data-v="dark" type="button">深色</button>
+        <button data-v="auto" type="button">跟随系统</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row-head">
+        <span class="row-label">字号</span>
+        <span class="row-hint" id="fsHint">17</span>
+      </div>
+      <div class="slider">
+        <span class="small">A</span>
+        <input type="range" id="fontRange" min="15" max="24" step="1" value="17" aria-label="正文字号">
+        <span class="big">A</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row-inline">
+        <span class="row-label">正文行距</span>
+        <span class="row-hint" id="lhHint">标准</span>
+      </div>
+      <div class="slider">
+        <span class="small">紧</span>
+        <input type="range" id="lhRange" min="0" max="3" step="1" value="1" aria-label="行距">
+        <span class="big">松</span>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row-inline">
+        <span class="row-label">代码自动换行</span>
+        <label class="switch">
+          <input type="checkbox" id="wrapToggle">
+          <span class="track"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="row-inline">
+        <span class="row-label">记住阅读位置</span>
+        <label class="switch">
+          <input type="checkbox" id="rememberToggle" checked>
+          <span class="track"></span>
+        </label>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===================== 回到顶部 ===================== -->
+<button class="to-top" id="toTop" aria-label="回到顶部">
+  <span class="icon"><svg viewBox="0 0 24 24"><path d="M12 19V6M6 12l6-6 6 6"/></svg></span>
+</button>
+
+<!-- ===================== 图片灯箱 ===================== -->
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" alt="">
+  <button class="lightbox-close" id="lightboxClose" aria-label="关闭">
+    <span class="icon"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+  </button>
+  <div class="lightbox-hint">双指缩放 · 双击放大 · 单击关闭</div>
+</div>
+
+<!-- ===================== 确认框 ===================== -->
+<div class="confirm" id="confirm" role="dialog" aria-modal="true">
+  <div class="confirm-box">
+    <div class="confirm-title" id="confirmTitle"></div>
+    <div class="confirm-msg" id="confirmMsg"></div>
+    <div class="confirm-acts" id="confirmActs"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="vendor/marked.js"></script>
+<script src="vendor/purify.js"></script>
+<script src="vendor/prism.js"></script>
+<script src="js/reader.js"></script>
+</body>
+</html>

@@ -1,0 +1,991 @@
+/* ==========================================================================
+   墨读 · ui.css
+   阅读器外壳：顶栏 / 目录抽屉 / 检索 / 设置面板 / 灯箱 / 进度
+   界面元素一律避让正文，正文是主角。
+   ========================================================================== */
+
+/* ==========================  顶部阅读进度  ========================== */
+
+.progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2px;
+  width: 0;
+  background: var(--primary);
+  z-index: 60;
+  transition: width .1s linear;
+  pointer-events: none;
+}
+
+/* ==========================  卷首标题  ========================== */
+
+/*
+ * 顶栏拿掉之后，屏幕上就没有第二个地方写着"在读什么"了。
+ * 这一条只在两个时机出现：刚打开时浮现一次，以及滚回顶部时。
+ * 不接事件、不占位，纯提示，滚起来就自己让开。
+ */
+.titletag {
+  position: fixed;
+  top: calc(var(--safe-top) + 8px);
+  left: 50%;
+  transform: translate(-50%, -6px);
+  z-index: 45;
+  max-width: min(74vw, 26em);
+  padding: .34em .95em;
+  border-radius: var(--r-full);
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-1);
+  color: var(--text-2);
+  font-size: .72em;
+  font-weight: 600;
+  letter-spacing: .04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s, transform .3s;
+}
+.titletag.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* 图标按钮 */
+.icon-btn {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: var(--r-full);
+  color: var(--text-2);
+  transition: background-color .15s, color .15s, transform .1s;
+}
+.icon-btn:active { background: var(--primary-soft); color: var(--primary-ink); transform: scale(.94); }
+.icon-btn.on { color: var(--primary-ink); }
+
+.icon { width: 21px; height: 21px; display: block; }
+.icon svg { display: block; width: 100%; height: 100%; }
+.icon svg * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* 实心图标例外 */
+.icon.solid svg * { fill: currentColor; stroke: none; }
+
+/* ==========================  目录抽屉  ========================== */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 70;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .28s;
+  -webkit-backdrop-filter: blur(1.5px);
+  backdrop-filter: blur(1.5px);
+}
+.scrim.show { opacity: 1; pointer-events: auto; }
+
+/* 侧栏的遮罩要压在所有面板之上，只有灯箱和轻提示比它高 */
+.rail-scrim {
+  z-index: 93;
+  transition-duration: .22s;
+  background: var(--overlay-soft);
+}
+
+.drawer {
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  width: min(82vw, 340px);
+  z-index: 80;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-101%);
+  transition: transform .3s cubic-bezier(.32, .72, 0, 1);
+  box-shadow: var(--sh-3);
+  border-right: 1px solid var(--border);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+.drawer.show { transform: none; }
+
+.drawer-head {
+  padding: calc(env(safe-area-inset-top, 0px) + 18px) 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer-kicker {
+  font-size: .68em;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: .35em;
+}
+.drawer-title {
+  font-family: var(--font-serif);
+  font-size: 1.02em;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.toc {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 0 calc(env(safe-area-inset-bottom, 0px) + 24px);
+  overscroll-behavior: contain;
+}
+/* ==========================================================================
+   文档结构图
+   标题本来是一棵树，摊平成缩进列表就把结构丢了。这里按层级接回父子关系再画出来。
+
+   形制照飞书的大纲/文件树：折叠箭头在文字左边，缩进处一条竖直引导线，
+   选中是一整条圆角底色。刻意不用圆点——圆点让每一行看起来像个时间轴节点，
+   而这里要的是"制表符"那种骨架感。
+   ========================================================================== */
+
+.toc-stat {
+  padding: 0 20px 10px 20px;
+  color: var(--text-3);
+  font-size: .68em;
+  letter-spacing: .12em;
+  font-variant-numeric: tabular-nums;
+}
+
+.troot {
+  padding: 0 10px calc(env(safe-area-inset-bottom, 0px) + 20px) 20px;
+}
+
+/* 每进一层缩进这么多；引导线就画在这一格的左边界上 */
+.tkids { padding-left: 16px; }
+
+.tnode {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 2px 8px 2px 0;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background-color .15s;
+}
+
+/* 横向引出：从引导线拉到这一行的第一个可见元素。
+   有分叉的行第一个东西是箭头，拉到箭头就行；叶子没有箭头，
+   那就一直拉到文字，否则中间空着 20px，那一横看着像断的。 */
+.tnode::after {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 16px;
+  height: 1px;
+  background: var(--border-strong);
+}
+.tnode.leaf::after { width: 37px; }   /* 16 缩进 + 16 箭头位 + 5 间距 */
+/* 竖向引导线。首行只画下半截、末行只画上半截，合起来是一条不断的线；
+   独子节点上下各收一半，高度归零，自然就不画 */
+.tnode::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border-strong);
+}
+.tnode:first-child::before { top: 50%; }
+.tnode:last-child::before { bottom: 50%; }
+
+/* 根节点没有父线 */
+.troot > .tnode::before,
+.troot > .tnode::after { display: none; }
+
+/* 折叠箭头。等宽占位，叶子节点也留着，文字才对得齐 */
+.tchev {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--text-3);
+  border-radius: 4px;
+}
+.tchev[data-fold]::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: rotate(90deg);   /* 展开时朝下 */
+  transition: transform .18s cubic-bezier(.22, 1.2, .36, 1);
+}
+.tnode.folded > .tchev[data-fold]::before { transform: none; }
+.tchev:active { background: var(--border); }
+
+.ttext {
+  margin-right: auto;
+  min-width: 0;
+  font-size: .84em;
+  line-height: 1.45;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tnode.lv1 > .ttext { font-size: .9em; font-weight: 600; color: var(--text); }
+.tnode.lv3 > .ttext, .tnode.lv4 > .ttext { font-size: .8em; color: var(--text-3); }
+
+/* 收起来时才露出的"这一支还有多少个标题" */
+.tcount {
+  flex: 0 0 auto;
+  display: none;
+  padding-left: 8px;
+  color: var(--text-3);
+  font-size: .72em;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.tnode.folded > .tcount { display: block; }
+.tnode.folded > .ttext { opacity: .6; }
+.tnode.folded + .tkids { display: none; }
+
+.tnode.active { background: var(--primary-soft); }
+.tnode.active > .ttext { color: var(--primary-ink); font-weight: 600; }
+.tnode.active > .tchev { color: var(--primary-ink); }
+
+.toc-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: .82em;
+}
+
+/* ==========================  检索  ========================== */
+
+.searchbar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 90;
+  height: var(--topbar-h);
+  padding-top: env(safe-area-inset-top, 0px);
+  box-sizing: content-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: max(6px, env(safe-area-inset-left, 0px));
+  padding-right: max(6px, env(safe-area-inset-right, 0px));
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  transform: translateY(-101%);
+  transition: transform .26s cubic-bezier(.32, .72, 0, 1);
+}
+.searchbar.show { transform: none; }
+
+.searchbar input {
+  flex: 1;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  border-radius: var(--r-full);
+  padding: 0 16px;
+  font-size: .88em;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color .15s;
+}
+.searchbar input:focus { border-color: var(--primary); }
+.searchbar input::placeholder { color: var(--text-3); }
+
+.search-count {
+  font-size: .74em;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.6em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+mark.hit {
+  background: var(--mark-bg);
+  color: inherit;
+  border-radius: 2px;
+  padding: .05em 0;
+}
+mark.hit.current {
+  background: var(--mark-active);
+  box-shadow: 0 0 0 2px var(--mark-active);
+  color: var(--text);
+}
+
+/* ==========================  底部设置面板  ========================== */
+
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 80;
+  background: var(--surface);
+  border-top-left-radius: var(--r-lg);
+  border-top-right-radius: var(--r-lg);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--sh-3);
+  transform: translateY(101%);
+  transition: transform .3s cubic-bezier(.32, .72, 0, 1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sheet.show { transform: none; }
+
+.sheet-grip {
+  width: 34px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  margin: 9px auto 4px;
+}
+.sheet-body { padding: 6px 20px 22px; }
+
+.row { padding: 13px 0; border-bottom: 1px solid var(--border); }
+.row:last-child { border-bottom: 0; }
+.row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.row-label { font-size: .82em; font-weight: 600; color: var(--text); }
+.row-hint { font-size: .74em; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+/* 分段控件 */
+.seg {
+  display: flex;
+  gap: 3px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  padding: 3px;
+  border-radius: var(--r-sm);
+}
+.seg button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: .78em;
+  padding: .5em .2em;
+  border-radius: 6px;
+  transition: background-color .15s, color .15s, box-shadow .15s;
+}
+.seg button.on {
+  background: var(--surface);
+  color: var(--primary-ink);
+  font-weight: 600;
+  box-shadow: var(--sh-1);
+}
+
+/* 字号滑杆 */
+.slider { display: flex; align-items: center; gap: 12px; }
+.slider .small { font-size: .76em; color: var(--text-3); font-family: var(--font-serif); }
+.slider .big { font-size: 1.32em; color: var(--text-3); font-family: var(--font-serif); }
+.slider input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  outline: none;
+}
+.slider input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 3px solid var(--surface);
+  box-shadow: var(--sh-2);
+}
+
+/* 开关 */
+.switch {
+  position: relative;
+  width: 44px; height: 26px;
+  flex: 0 0 auto;
+}
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; z-index: 2; }
+.switch .track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
+  transition: background-color .2s;
+}
+.switch .track::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--sh-1);
+  transition: transform .2s cubic-bezier(.32, .72, 0, 1);
+}
+.switch input:checked + .track { background: var(--primary); }
+.switch input:checked + .track::after { transform: translateX(18px); }
+
+.row-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.row-inline + .slider { margin-top: 12px; }
+
+/* ==========================================================================
+   左侧工具栏
+   顶栏拿掉之后，这里是阅读页唯一的常驻入口。
+   结构照搬云驿的左栏：图标在上、文字在下，玻璃底，选中时左缘一道短竖条。
+   但要按手指的尺寸重新定：那边是鼠标，42px 够用；这边最小触控目标按 48px 起。
+   ========================================================================== */
+
+/* 左缘的把手。纯提示，不接事件——否则会挡住正文左侧的链接和图片。
+   两端做淡出，看起来像滚动指示条而不是一根贴着边的线 */
+.edge {
+  position: fixed;
+  left: var(--safe-left);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 94;
+  width: 12px;
+  height: 92px;
+  display: grid;
+  place-items: center start;
+  pointer-events: none;
+  opacity: .7;
+  transition: opacity .2s;
+}
+.edge i {
+  display: block;
+  width: 3px;
+  height: 46px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg,
+    transparent, var(--border-strong) 24%,
+    var(--border-strong) 76%, transparent);
+}
+body.rail-open .edge { opacity: 0; }
+
+/*
+ * 工具栏是一块浮在正文上的毛玻璃卡片，不是贴着屏幕边的板子——
+ * 上下左右都留出空隙、四角圆角、半透明 + 背景模糊 + 实投影，
+ * 这一组才是"悬浮"的来源。云驿那条 .rail 就是这个路数（margin 8px + radius 12px）。
+ */
+.navrail {
+  position: fixed;
+  top: calc(var(--safe-top) + 8px);
+  bottom: calc(var(--safe-bottom) + 8px);
+  left: calc(var(--safe-left) + 8px);
+  z-index: 96;
+  /* 56px 是云驿那条的宽度。手机屏幕本来就窄，工具栏宽一分，
+     正文的呼吸就少一分——它不是主角，够用就行。 */
+  width: 56px;
+  /*
+   * 高度只够装下条目，不再上下拉伸。
+   * 拉满整屏时，八个条目占不到六成，剩下四成是空玻璃——一条长条竖在
+   * 屏幕左边，很容易被当成侧边栏，而不是一张浮着的卡片。
+   *
+   * top/bottom 都写死、高度又是定值，这时上下两个 auto 外边距会平分
+   * 剩余空间，卡片自动落在正中间。用外边距而不是 transform 居中：
+   * transform 已经被滑入滑出的位移动画占着了。
+   */
+  height: fit-content;
+  max-height: calc(100% - var(--safe-top) - var(--safe-bottom) - 16px);
+  margin-top: auto;
+  margin-bottom: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  border-radius: 15px;
+  border: 1px solid var(--glass-line);
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  /* 第一层是外投影，第二层是顶边的内高光——玻璃的"厚度"就靠它 */
+  box-shadow: var(--glass-sh), inset 0 1px 0 var(--glass-hi);
+  transform: translateX(-115%) scale(.94);
+  transform-origin: left center;
+  visibility: hidden;
+  touch-action: pan-y;   /* 栏内还能纵向滚 */
+  transition: transform .34s cubic-bezier(.22, 1.15, .36, 1), visibility 0s .34s;
+}
+.navrail.show {
+  transform: none;
+  visibility: visible;
+  transition: transform .34s cubic-bezier(.22, 1.15, .36, 1), visibility 0s 0s;
+}
+/* 拖拽跟手时要关掉过渡，松手再交还给回弹动画 */
+.navrail.dragging { transition: none; visibility: visible; }
+
+/* flex-basis auto 而不是 0：栏高现在由内容决定，这一层要把自己的内容高度
+   报上去；只有撞到 max-height 时才收缩，再由 overflow 接管滚动 */
+.navrail-scroll {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.navrail-scroll::-webkit-scrollbar { display: none; }
+
+.navrail-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.navrail-line {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 1px;
+  margin: 7px 0;
+  background: var(--border);
+}
+.navrail-foot { padding-top: 5px; }
+
+/*
+ * 条目 44px：比云驿的 42px 略大一点。那一套是按鼠标定的，
+ * 手指需要更宽裕的落点，而 44 正好是 iOS 的触控下限，不再往下压了。
+ */
+.rail-item {
+  position: relative;
+  width: 44px;
+  min-height: 46px;
+  padding: 6px 0 5px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  letter-spacing: .04em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  transition: color .16s, background-color .16s, transform .12s;
+}
+.rail-item::before { content: ""; }
+
+/* 选中时左缘那道短竖条。位置照云驿：相对条目左边 4px，不是贴到栏的边上 */
+.rail-item.on::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 2.5px;
+  height: 19px;
+  border-radius: 3px;
+  background: var(--accent-ink);
+  transform: translateY(-50%);
+  animation: railMark .26s cubic-bezier(.22, 1.4, .36, 1);
+}
+@keyframes railMark {
+  from { height: 0; opacity: 0; }
+  to   { height: 19px; opacity: 1; }
+}
+
+.rail-item.on {
+  color: var(--primary-ink);
+  background: var(--primary-soft);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+.rail-item:active { transform: scale(.94); }
+.rail-item[hidden] { display: none; }
+
+.rail-ic { width: 18px; height: 18px; display: block; }
+.rail-ic svg { display: block; width: 100%; height: 100%; }
+.rail-ic svg * {
+  fill: none;
+  stroke: currentColor;
+  /* 图标缩到 18px 之后，1.8 的线宽只剩 1.35 个像素，看着发虚；补到 2 才回到原来的分量 */
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.rail-label { font-weight: 500; line-height: 1; }
+
+/* ==========================  编辑  ========================== */
+
+.editor {
+  position: fixed;
+  inset: 0;
+  z-index: 88;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+  transform: translateY(101%);
+  visibility: hidden;
+  transition: transform .3s cubic-bezier(.16, 1, .3, 1), visibility 0s .3s;
+}
+.editor.show {
+  transform: none;
+  visibility: visible;
+  transition: transform .3s cubic-bezier(.16, 1, .3, 1), visibility 0s 0s;
+}
+
+/* 语法的插入按钮。高频的几个放前面，横向可以滑 */
+.editor-bar {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding: calc(var(--safe-top) + 10px) 12px 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.editor-bar::-webkit-scrollbar { display: none; }
+
+.md-btn {
+  flex: 0 0 auto;
+  padding: .44em .72em;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: .76em;
+  white-space: nowrap;
+}
+.md-btn:active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+
+.editor-meta {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: 7px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: .7em;
+  font-variant-numeric: tabular-nums;
+}
+.editor-meta .editor-dot { opacity: .5; }
+.editor-meta .dirty { color: var(--tok-attr); }
+
+.editor-area {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 16px max(16px, var(--pad-x)) 20vh;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: .94em;
+  line-height: 1.75;
+  tab-size: 4;
+}
+
+/* ==========================  空文档  ========================== */
+
+.doc-empty {
+  margin: 14vh auto 0;
+  max-width: 22em;
+  padding: 26px 22px 28px;
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-lg);
+  color: var(--text-3);
+  font-size: .88em;
+}
+.doc-empty b {
+  display: block;
+  margin-bottom: .5em;
+  font-family: var(--font-serif);
+  font-size: 1.35em;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.doc-empty p { margin: 0 0 1.2em; line-height: 1.7; }
+.doc-empty button {
+  border: 1px solid var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  font-family: var(--font-sans);
+  font-size: .9em;
+  font-weight: 600;
+  padding: .6em 1.4em;
+  border-radius: var(--r-full);
+}
+
+/* ==========================  灯箱  ========================== */
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(12, 18, 22, .94);
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s;
+  touch-action: none;
+}
+.lightbox.show { opacity: 1; pointer-events: auto; }
+.lightbox img {
+  max-width: 100vw;
+  max-height: 100vh;
+  border-radius: 0;
+  background: transparent;
+  transform-origin: center center;
+  will-change: transform;
+  transition: transform .12s ease-out;
+}
+.lightbox-close {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  right: 12px;
+  width: 44px; height: 44px;
+  color: #fff;
+  background: rgba(255, 255, 255, .1);
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+}
+.lightbox-hint {
+  position: absolute;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+  left: 0; right: 0;
+  text-align: center;
+  color: rgba(255, 255, 255, .5);
+  font-size: .74em;
+  letter-spacing: .04em;
+}
+
+/* ==========================  回到顶部  ========================== */
+
+.to-top {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+  z-index: 55;
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  color: var(--text-2);
+  display: grid;
+  place-items: center;
+  box-shadow: var(--sh-2);
+  opacity: 0;
+  transform: translateY(10px) scale(.9);
+  pointer-events: none;
+  transition: opacity .22s, transform .22s;
+}
+.to-top.show { opacity: 1; transform: none; pointer-events: auto; }
+.to-top:active { transform: scale(.92); }
+
+/* ==========================  确认框  ========================== */
+
+/*
+ * 原生侧没接 WebChromeClient，window.confirm 不会弹；而且"保存并退出 / 放弃改动 / 继续写"
+ * 是三选一，系统那个两按钮的对话框也表达不了。
+ */
+.confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 105;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.confirm.show { opacity: 1; pointer-events: auto; }
+
+.confirm-box {
+  width: 100%;
+  max-width: 21em;
+  padding: 22px 22px 16px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--sh-3);
+  transform: translateY(8px) scale(.97);
+  transition: transform .24s cubic-bezier(.16, 1, .3, 1);
+}
+.confirm.show .confirm-box { transform: none; }
+
+.confirm-title {
+  font-family: var(--font-serif);
+  font-size: 1.08em;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: .5em;
+}
+.confirm-msg {
+  font-size: .84em;
+  line-height: 1.7;
+  color: var(--text-2);
+  margin-bottom: 1.4em;
+}
+.confirm-acts {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.confirm-acts button {
+  width: 100%;
+  padding: .78em 1em;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: .86em;
+  font-weight: 600;
+}
+.confirm-acts button.primary {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+.confirm-acts button.danger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger);
+  font-weight: 500;
+}
+.confirm-acts button:active { transform: scale(.98); }
+
+/* ==========================  轻提示  ========================== */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+  transform: translate(-50%, 12px);
+  z-index: 110;
+  background: var(--text);
+  color: var(--bg);
+  font-size: .78em;
+  padding: .6em 1.05em;
+  border-radius: var(--r-full);
+  box-shadow: var(--sh-3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  max-width: 78vw;
+  text-align: center;
+}
+.toast.show { opacity: .94; transform: translate(-50%, 0); }
+
+/* ==========================  宽屏：目录常驻右栏  ========================== */
+
+/*
+ * 这条必须放在 media query 之前。
+ * 一开始它写在后面，同优先级下后来者胜，于是宽屏那条 display:block 永远被它盖掉，
+ * 右栏从来没出现过——是截图才看出来的。
+ */
+.toc-rail { display: none; }
+
+@media (min-width: 900px) {
+  :root { --pad-x: 40px; }
+
+  .toc-rail {
+    display: block;
+    position: fixed;
+    top: 0; right: 0;
+    width: 260px;
+    height: 100%;
+    padding: 28px 18px;
+    overflow-y: auto;
+    border-left: 1px solid var(--border);
+    background: var(--bg);
+    overscroll-behavior: contain;
+  }
+  /* 右栏比抽屉窄，结构图的缩进和字号都要收一档 */
+  .toc-rail .toc-stat { padding: 0 10px 10px; letter-spacing: .1em; }
+  .toc-rail .troot { padding: 0 8px 28px 14px; }
+  .toc-rail .tkids { padding-left: 13px; }
+  .toc-rail .tnode { min-height: 30px; padding-right: 6px; }
+  .toc-rail .tnode::before,
+  .toc-rail .tnode::after { left: -13px; }
+  .toc-rail .tnode::after { width: 13px; }
+  .toc-rail .tnode.leaf::after { width: 34px; }
+  .toc-rail .ttext { font-size: .78em; }
+  .toc-rail .tnode.lv1 > .ttext { font-size: .84em; }
+  .toc-rail .tnode.lv3 > .ttext,
+  .toc-rail .tnode.lv4 > .ttext { font-size: .75em; }
+
+  /* 有右栏时把正文往左推 */
+  body.has-rail .page { margin-left: max(calc(50% - var(--content-w) / 2 - 130px), var(--pad-x)); }
+  body.has-rail .drawer { display: none; }
+  /* 目录已经在右边常驻了，侧栏里那一条就多余 */
+  body.has-rail #navToc { display: none; }
+  /* 别让回到顶部压在右栏上 */
+  body.has-rail .to-top { right: calc(260px + 16px); }
+}
+
+/* ==========================  无障碍 / 偏好  ========================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}

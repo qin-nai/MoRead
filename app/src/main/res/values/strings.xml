@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">墨读</string>
+    <string name="tagline">Markdown 阅读器</string>
+
+    <string name="open_file">打开文件</string>
+    <string name="open_folder">文件夹</string>
+    <string name="new_doc">新建</string>
+    <string name="section_recent">最近阅读</string>
+    <string name="section_folder">当前文件夹</string>
+    <string name="change_folder">更换</string>
+    <string name="go_up">上级</string>
+
+    <string name="sort_by_name">按名称</string>
+    <string name="sort_by_time">按时间</string>
+
+    <string name="empty_title">还没有打开过文档</string>
+    <string name="empty_hint">选一个 .md 文件，或指定一个文件夹——之后就能在里面新建，也能看到文档引用的本地图片</string>
+    <string name="folder_hint">这一层没有 .md 文件</string>
+
+    <string name="new_doc_title">新建文档</string>
+    <string name="new_doc_hint">未命名</string>
+    <string name="create_failed">新建失败，这个文件夹不能写入</string>
+    <string name="pick_folder_first">先选一个文件夹，之后就能在里面新建了</string>
+
+    <string name="rename">重命名</string>
+    <string name="rename_failed">重命名失败</string>
+    <string name="delete">删除</string>
+    <string name="delete_confirm">确定删除「%1$s」？删掉就找不回来了。</string>
+    <string name="delete_failed">删除失败</string>
+    <string name="share">分享</string>
+    <string name="share_via">分享到</string>
+    <string name="remove_recent">从最近移除</string>
+
+    <string name="no_app_for_link">没有可以打开该链接的应用</string>
+    <string name="copied">已复制</string>
+    <string name="loading">正在读取…</string>
+    <string name="read_failed">读取失败</string>
+    <string name="need_folder">需要文件夹授权才能打开相对链接</string>
+    <string name="action_cancel">取消</string>
+    <string name="action_ok">确定</string>
+    <string name="sheet_title_new">新建文档</string>
+    <string name="sheet_title_rename">重命名</string>
+    <string name="sheet_title_delete">删除文档</string>
+</resources>

@@ -1,0 +1,14 @@
+# 构建产物
+build/
+app/build/
+.gradle/
+
+# 本机相关
+local.properties
+.toolchain/
+.toolchain/edgeprofile*/
+
+# 预览与测试产生的东西
+tools/preview/shots/
+tools/node_modules/
+tools/package-lock.json

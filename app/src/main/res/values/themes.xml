@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="AppTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text_2</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!--
+      阅读页单独一个主题：Android 15 起 targetSdk 35 会强制边到边，
+      状态栏/导航栏颜色由框架接管，所以这里只保证窗口底色一致，
+      真正的避让交给布局里的 fitsSystemWindows。
+    -->
+    <style name="ReaderTheme" parent="AppTheme">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!--
+      底部面板的窗口。背景必须透明，否则会盖住布局自己那层圆角；
+      从下往上滑，不要用 Dialog 默认的缩放淡入——那不像"面板"。
+    -->
+    <style name="SheetDialog" parent="@android:style/Theme.Material.Light.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowAnimationStyle">@style/SheetAnim</item>
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:backgroundDimAmount">0.42</item>
+    </style>
+
+    <!--
+      长按菜单的窗口。同样是全屏透明窗口，但压暗和动效都不走主题：
+      那层淡压暗是布局里的一层 Scrim，卡片从落点长出来的动画在代码里，
+      两边都由同一条时间线驱动，窗口自己再插一脚反而对不齐。
+    -->
+    <style name="MenuDialog" parent="@android:style/Theme.Material.Light.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
+    <style name="SheetAnim">
+        <item name="android:windowEnterAnimation">@anim/sheet_in</item>
+        <item name="android:windowExitAnimation">@anim/sheet_out</item>
+    </style>
+
+</resources>

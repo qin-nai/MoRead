@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  悬浮卡片里的一行。和 item_sheet_row 是同一套内容，只是收窄了一圈：
+  卡片本来就小，行高 52 会让它看着像块砖。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="42dp"
+    android:layout_marginStart="6dp"
+    android:layout_marginEnd="6dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="11dp"
+    android:paddingEnd="11dp"
+    android:background="@drawable/bg_menu_row"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ImageView
+        android:id="@+id/rowIcon"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:tint="@color/text_2"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/rowLabel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="@color/text"
+        android:textSize="14sp" />
+</LinearLayout>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  长按菜单：一张贴在手指边上的悬浮卡片。
+
+  三层结构是必要的，不是叠着玩：
+  menuRoot 不吃系统栏内边距，压暗层才能铺满整块屏幕（含状态栏和导航栏）；
+  menuSafe 吃，卡片才不会顶到状态栏里去。
+  fitsSystemWindows 放在中间这层，两边各管一件事。
+
+  卡片初始透明、位置在左上角，等量出高矮后再由代码挪到落点。
+  窗口是全屏透明的，不先藏着的话会看见它在左上角闪一下。
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <View
+        android:id="@+id/menuScrim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0"
+        android:background="@color/overlay_soft"
+        android:clickable="true"
+        android:focusable="true" />
+
+    <FrameLayout
+        android:id="@+id/menuSafe"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fitsSystemWindows="true">
+
+        <LinearLayout
+            android:id="@+id/menuCard"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:alpha="0"
+            android:background="@drawable/bg_menu"
+            android:elevation="10dp"
+            android:orientation="vertical"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp">
+
+            <LinearLayout
+                android:id="@+id/menuRows"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.application'
+}
+
+// 版本号只写一处，清单和产物文件名都从这儿取
+def VERSION = '1.0'
+
+android {
+    namespace 'com.moread'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.moread'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName VERSION
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // 自用软件，release 也用调试签名，省去配密钥的麻烦。
+            // 要上架应用商店的话，换成自己的 signingConfig。
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    buildFeatures {
+        // ReaderActivity 用 BuildConfig.DEBUG 决定是否开启 WebView 远程调试
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    androidResources {
+        // md 已经是最终形态，不需要再压
+        noCompress += ['md']
+    }
+}
+
+/*
+ * 产物名带上名字和版本号：app-release.apk 这种默认名发出去，
+ * 下载的人手里一堆同名文件，谁也分不清哪个是哪个版本。
+ * debug 后缀留着，免得两个包同名互相覆盖。
+ */
+androidComponents {
+    // Groovy 这边要显式给 selector，Kotlin 的默认参数重载在这边不成立
+    onVariants(selector().all()) { variant ->
+        def suffix = variant.name == 'release' ? '' : "-${variant.name}"
+        variant.outputs.forEach { out ->
+            out.outputFileName.set("MoRead-${VERSION}${suffix}.apk")
+        }
+    }
+}
+
+dependencies {
+    // 只为了 DocumentFile 这一个类。SAF 的树形 URI 操作手写容易出错，
+    // 用官方封装比自己怼 DocumentsContract 稳妥。
+    implementation 'androidx.documentfile:documentfile:1.0.1'
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 暗色由雾蓝的同一色相推导而来，不是把亮色反相 -->
+<resources>
+    <color name="bg">#151b1f</color>
+    <color name="bg_sunken">#111619</color>
+    <color name="surface">#1c242a</color>
+    <color name="surface_2">#222c33</color>
+    <color name="border">#2b3740</color>
+    <color name="border_strong">#3a4a55</color>
+
+    <color name="text">#e3e8e4</color>
+    <color name="text_2">#a7b4bc</color>
+    <color name="text_3">#7b8a93</color>
+
+    <color name="primary">#9db6cb</color>
+    <color name="primary_ink">#a8c2d6</color>
+    <color name="primary_soft">#233039</color>
+
+    <color name="accent">#a9c48f</color>
+    <color name="accent_ink">#b6cfa0</color>
+
+    <color name="danger">#d09a8b</color>
+
+    <color name="divider">#263139</color>
+</resources>
