@@ -4,11 +4,13 @@ import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -54,11 +56,14 @@ public class MainActivity extends Activity {
      * 等待远小于"点一下等一下"的体感成本，而且顺手就把每层的文档数算出来了。
      * 目录特别大时靠 MAX_NODES 兜底。
      */
-    private static final class Node {
-        final DocumentFile file;
+    static final class Node {
+        /** 只留 URI，不留 DocumentFile：后者每问一次名字/类型/大小都要再查一遍 provider */
+        final Uri uri;
         final String name;
         final String relPath;
         final boolean isDir;
+        /** 文件的修改时间。读目录那趟查询里顺手带出来的，排序直接用它 */
+        final long mtime;
         final List<Node> kids = new ArrayList<>();
         /** 文件是大小，目录是整棵子树的文档数 */
         String meta = "";
@@ -67,11 +72,12 @@ public class MainActivity extends Activity {
         /** 因为上限被截断了，还有内容没读进来 */
         boolean truncated;
 
-        Node(DocumentFile file, String name, String relPath, boolean isDir) {
-            this.file = file;
+        Node(Uri uri, String name, String relPath, boolean isDir, long mtime) {
+            this.uri = uri;
             this.name = name;
             this.relPath = relPath;
             this.isDir = isDir;
+            this.mtime = mtime;
         }
     }
 
@@ -90,6 +96,8 @@ public class MainActivity extends Activity {
     private Uri treeUri;
     /** 授权根目录那棵树。null 表示还没读到 */
     private Node root;
+    /** root 是从哪个目录读出来的。换了目录，缓存这棵就不能再用了 */
+    private Uri treeRootUri;
     private int sortMode = SORT_TIME;
     /** 用户点了新建但还没有可写的文件夹，选完文件夹接着弹命名框。 */
     private boolean pendingNew;
@@ -355,33 +363,59 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * 把授权目录整棵读进来。全是 I/O（SAF 每读一层都是一次跨进程查询），
-     * 放后台线程；目录很大时不至于卡住界面。
+     * 把授权目录整棵读进来。
+     *
+     * 手上已经有一棵树时不清屏：重读是后台的事，看得见的那份不该跟着白一下。
+     * 读完如果和手上那棵一模一样（回到首页十有八九如此），连视图都不重建——
+     * 几百行拆了重建一遍纯属白干。
      */
     private void loadTree() {
-        listFolder.removeAllViews();
-        root = null;
-        updateHeader();
-
         final Uri tree = treeUri;
+
+        // 手上那棵是别的目录读出来的，就别拿来顶了（tree 为空也要走这一步，别拿它去 equals）
+        if (root != null && (tree == null || !tree.equals(treeRootUri))) {
+            root = null;
+            listFolder.removeAllViews();
+        }
+
         if (tree == null) {
+            root = null;
+            listFolder.removeAllViews();
+            updateHeader();
             updateEmpty();
             return;
         }
-        showFolderHint(getString(R.string.folder_reading));
 
+        if (root == null) {
+            listFolder.removeAllViews();
+            updateHeader();
+            showFolderHint(getString(R.string.folder_reading));
+        }
+
+        final String rootName = Recents.folderName(this);
         new Thread(() -> {
             Node built = null;
             try {
-                DocumentFile dir = DocumentFile.fromTreeUri(this, tree);
-                if (dir != null) built = walk(dir, "", 0, new int[]{MAX_NODES});
+                built = walk(tree, DocumentsContract.getTreeDocumentId(tree), rootName, "", 0,
+                        new int[]{MAX_NODES});
             } catch (Exception ignored) {
-                // 授权可能已失效，按空目录处理
+                // 授权可能已失效，或者 provider 这次抽风
             }
             final Node done = built;
             runOnUiThread(() -> {
                 if (!tree.equals(treeUri)) return;   // 期间又换了目录，过期结果丢掉
+                if (done == null) {
+                    // 这次没读上来。手上有旧的就先留着，别因为一次失败把树清空；
+                    // 本来就没读出来过，那就把「正在读取」那句撤掉
+                    if (root == null) {
+                        listFolder.removeAllViews();
+                        updateEmpty();
+                    }
+                    return;
+                }
+                if (root != null && sameTree(root, done)) return;
                 root = done;
+                treeRootUri = tree;
                 renderTree();
                 updateHeader();
                 updateEmpty();
@@ -389,51 +423,74 @@ public class MainActivity extends Activity {
         }, "moread-tree").start();
     }
 
+    /** 读一层目录用的列。名字、类型、大小、修改时间一趟拿齐 */
+    private static final String[] COLS = {
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_SIZE,
+    };
+    private static final int C_ID = 0, C_NAME = 1, C_TYPE = 2, C_MTIME = 3, C_SIZE = 4;
+
     /**
      * 递归读一层目录，把子目录一起读掉。
+     *
+     * 这里没用 DocumentFile 的 listFiles()：它一个光标里其实已经查出了名字、
+     * 类型和修改时间，却丢掉不用，之后每问一次 getName() / isDirectory() /
+     * lastModified() 都各自再查一遍 provider。几百个文件就是几倍的跨进程往返，
+     * 而排序时每比一次都要问一遍 lastModified，还要乘上 log n。
+     * 自己查一次光标，这些数字全在手上。
      *
      * budget 是整棵树共享的剩余名额，读完就停：授权根选错了（比如把整个
      * 下载目录指进来）时，不至于让应用卡在那儿读几千个文件。
      */
-    private Node walk(DocumentFile dir, String base, int depth, int[] budget) {
-        Node node = new Node(dir, dir.getName(), base, true);
+    private Node walk(Uri tree, String docId, String name, String base, int depth, int[] budget) {
+        Node node = new Node(DocumentsContract.buildDocumentUriUsingTree(tree, docId),
+                name, base, true, 0);
         if (depth >= MAX_DEPTH) {
             node.truncated = true;
             return node;
         }
 
-        DocumentFile[] children;
-        try {
-            children = dir.listFiles();
-        } catch (Exception e) {
-            children = new DocumentFile[0];   // 这一层读不动就跳过，别拖垮整棵
-        }
-
         List<Node> found = new ArrayList<>();
-        for (DocumentFile f : children) {
-            if (budget[0] <= 0) {
-                node.truncated = true;
-                break;
-            }
-            String n = f.getName();
-            if (n == null || n.startsWith(".")) continue;
-            String rel = Docs.joinPath(base, n);
+        Cursor c = null;
+        try {
+            c = getContentResolver().query(
+                    DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId),
+                    COLS, null, null, null);
+            while (c != null && c.moveToNext()) {
+                if (budget[0] <= 0) {
+                    node.truncated = true;
+                    break;
+                }
+                String child = c.getString(C_NAME);
+                if (child == null || child.startsWith(".")) continue;
 
-            if (f.isDirectory()) {
-                budget[0]--;
-                Node kid = walk(f, rel, depth + 1, budget);
-                node.docs += kid.docs;
-                // 截断往上带一层。只在发生的那个节点上标记的话，
-                // 埋在两三层下的截断冒不到根，树底那句提示就永远不显示
-                if (kid.truncated) node.truncated = true;
-                found.add(kid);
-            } else if (f.isFile() && Docs.isMarkdown(n)) {
-                budget[0]--;
-                Node leaf = new Node(f, n, rel, false);
-                leaf.meta = Docs.formatSize(f.length());
-                node.docs++;
-                found.add(leaf);
+                String id = c.getString(C_ID);
+                String rel = Docs.joinPath(base, child);
+
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(C_TYPE))) {
+                    budget[0]--;
+                    Node kid = walk(tree, id, child, rel, depth + 1, budget);
+                    node.docs += kid.docs;
+                    // 截断往上带一层。只在发生的那个节点上标记的话，
+                    // 埋在两三层下的截断冒不到根，树底那句提示就永远不显示
+                    if (kid.truncated) node.truncated = true;
+                    found.add(kid);
+                } else if (Docs.isMarkdown(child)) {
+                    budget[0]--;
+                    Node leaf = new Node(DocumentsContract.buildDocumentUriUsingTree(tree, id),
+                            child, rel, false, c.isNull(C_MTIME) ? 0 : c.getLong(C_MTIME));
+                    leaf.meta = Docs.formatSize(c.isNull(C_SIZE) ? 0 : c.getLong(C_SIZE));
+                    node.docs++;
+                    found.add(leaf);
+                }
             }
+        } catch (Exception e) {
+            // 这一层读不动就跳过，别拖垮整棵
+        } finally {
+            if (c != null) c.close();
         }
 
         Collections.sort(found, this::compare);
@@ -445,10 +502,27 @@ public class MainActivity extends Activity {
     private int compare(Node a, Node b) {
         if (a.isDir != b.isDir) return a.isDir ? -1 : 1;
         if (sortMode == SORT_TIME && !a.isDir) {
-            int byTime = Long.compare(b.file.lastModified(), a.file.lastModified());
+            int byTime = Long.compare(b.mtime, a.mtime);
             if (byTime != 0) return byTime;
         }
         return a.name.compareToIgnoreCase(b.name);
+    }
+
+    /**
+     * 两棵树长得一样吗。只比结构、名字、大小和截断标记，全是内存里的字段，
+     * 一个 provider 都不问——所以拿来当"这次白读了"的判据不亏。
+     */
+    private static boolean sameTree(Node a, Node b) {
+        if (a == null || b == null) return a == b;
+        if (a.docs != b.docs || a.truncated != b.truncated || a.kids.size() != b.kids.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.kids.size(); i++) {
+            Node x = a.kids.get(i), y = b.kids.get(i);
+            if (x.isDir != y.isDir || !x.name.equals(y.name) || !x.meta.equals(y.meta)) return false;
+            if (x.isDir && !sameTree(x, y)) return false;
+        }
+        return true;
     }
 
     private void sortTree(Node dir) {
@@ -458,10 +532,35 @@ public class MainActivity extends Activity {
         }
     }
 
-    /** 展开／收起一层。收起的目录按相对路径记着，重读一次树也不会又摊开。 */
-    private void toggleFold(Node dir) {
-        if (!folded.remove(dir.relPath)) folded.add(dir.relPath);
-        renderTree();
+    /**
+     * 展开／收起一层。收起的目录按相对路径记着，重读一次树也不会又摊开。
+     *
+     * 只动这一支的行，不整棵重建：摊平之后一个节点的后代在列表里是连续的一段，
+     * 收起就是删掉紧跟其后的那段，展开就是把它插回去。几百行的树上点一下箭头
+     * 就重建几百个 View，那才是真的浪费。
+     */
+    private void toggleFold(TreeRow row, Node dir) {
+        boolean opening = folded.remove(dir.relPath);
+        if (!opening) folded.add(dir.relPath);
+
+        int at = listFolder.indexOfChild(row);
+        if (at < 0) return;
+
+        if (opening) {
+            insertRows(at + 1, dir.kids, row.depth + 1,
+                    TreeRow.childMask(row.mask, row.depth, row.last));
+        } else {
+            int end = at + 1;
+            while (end < listFolder.getChildCount() && isDeeper(listFolder.getChildAt(end), row.depth)) {
+                end++;
+            }
+            listFolder.removeViews(at + 1, end - at - 1);
+        }
+        decorate(row, dir);
+    }
+
+    private static boolean isDeeper(View v, int depth) {
+        return v instanceof TreeRow && ((TreeRow) v).depth > depth;
     }
 
     /* ------------------------------------------------------------------ *
@@ -489,41 +588,82 @@ public class MainActivity extends Activity {
             showFolderHint(getString(R.string.folder_hint));
             return;
         }
-        addRows(root.kids, 0, 0);
+        insertRows(0, root.kids, 0, 0);
         updateHeader();
         if (root.truncated) showFolderHint(getString(R.string.folder_truncated));
     }
 
     /**
-     * 把树摊平成一列行往里加。每行自己知道层级、以及"祖先里谁还有后续兄弟"
-     * （mask），连接线由各行的 TreeRow 各画各的——不用嵌套容器，
+     * 把树摊平成一列行，从 index 处开始插。每行自己知道层级、以及"祖先里谁还有
+     * 后续兄弟"（mask），连接线由各行的 TreeRow 各画各的——不用嵌套容器，
      * 折起来也只是少加几行。
+     *
+     * @return 插完之后下一个空位的下标
      */
-    private void addRows(List<Node> nodes, int depth, int mask) {
+    private int insertRows(int index, List<Node> nodes, int depth, int mask) {
         for (int i = 0; i < nodes.size(); i++) {
             Node n = nodes.get(i);
             boolean last = i == nodes.size() - 1;
-            listFolder.addView(treeRow(n, depth, mask, i == 0, last));
+            listFolder.addView(treeRow(n, depth, mask, i == 0, last), index);
+            index++;
             if (n.isDir && !folded.contains(n.relPath) && !n.kids.isEmpty()) {
-                addRows(n.kids, depth + 1, TreeRow.childMask(mask, depth, last));
+                index = insertRows(index, n.kids, depth + 1, TreeRow.childMask(mask, depth, last));
             }
         }
+        return index;
     }
 
     private View treeRow(Node n, int depth, int mask, boolean first, boolean last) {
         TreeRow v = (TreeRow) LayoutInflater.from(this)
                 .inflate(R.layout.item_tree, listFolder, false);
+        v.node = n;
         v.setConnectors(depth, mask, first, last, n.isDir);
 
-        ImageView chev = v.findViewById(R.id.treeChev);
-        ImageView icon = v.findViewById(R.id.treeIcon);
-        TextView name = v.findViewById(R.id.treeName);
-        TextView meta = v.findViewById(R.id.treeMeta);
+        if (n.isDir) {
+            ((ImageView) v.findViewById(R.id.treeIcon)).setImageResource(R.drawable.ic_folder);
+        }
+        ((TextView) v.findViewById(R.id.treeName)).setText(n.name);
+        decorate(v, n);
 
+        v.setOnClickListener(x -> {
+            if (n.isDir) {
+                toggleFold(v, n);
+            } else {
+                // 文档所在的那一层当基准路径，它引用的相对图片才找得到
+                openReader(n.uri, treeUri, n.name, null, Docs.parentOf(n.relPath));
+            }
+        });
+        rememberPress(v);
+        v.setOnLongClickListener(x -> { showFileMenu(n, v); return true; });
+        return v;
+    }
+
+    /**
+     * 让这一行记住手指按下的位置。
+     *
+     * OnLongClickListener 只给 View 不给坐标，而菜单要落在按住的地方，
+     * 所以在 ACTION_DOWN 上把屏幕坐标先存进 tag。只记不吃（返回 false），
+     * 点击、长按、滑动的判定原样交给系统。
+     *
+     * 两种列表（最近阅读、目录树）都得接上：少接一个，那一列的菜单就会退回
+     * 行中心，再被"右边放不下就翻到左边"那条规则甩到屏幕最左边去。
+     */
+    private static void rememberPress(View v) {
+        v.setOnTouchListener((view, ev) -> {
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                view.setTag(new float[]{ev.getRawX(), ev.getRawY()});
+            }
+            return false;
+        });
+    }
+
+    /** 一行里会随折叠变的两处：箭头朝向、收起时右边那个文档数 */
+    private void decorate(TreeRow v, Node n) {
+        ImageView chev = v.findViewById(R.id.treeChev);
+        TextView meta = v.findViewById(R.id.treeMeta);
         if (n.isDir) {
             // 展开时箭头朝下，收起朝右
             chev.setRotation(folded.contains(n.relPath) ? 0f : 90f);
-            icon.setImageResource(R.drawable.ic_folder);
             // 一个 .md 都没有的分支不报数，挂个「0 篇」只是噪声
             meta.setText(n.docs == 0 ? "" : getString(R.string.folder_count, n.docs));
         } else {
@@ -531,18 +671,6 @@ public class MainActivity extends Activity {
             chev.setVisibility(View.INVISIBLE);
             meta.setText(n.meta);
         }
-        name.setText(n.name);
-
-        v.setOnClickListener(x -> {
-            if (n.isDir) {
-                toggleFold(n);
-            } else {
-                // 文档所在的那一层当基准路径，它引用的相对图片才找得到
-                openReader(n.file.getUri(), treeUri, n.name, null, Docs.parentOf(n.relPath));
-            }
-        });
-        v.setOnLongClickListener(x -> { showFileMenu(n, v); return true; });
-        return v;
     }
 
     private void showFolderHint(String text) {
@@ -587,14 +715,14 @@ public class MainActivity extends Activity {
     private void showFileMenu(Node n, View anchor) {
         List<Row> rows = new ArrayList<>();
         rows.add(new Row(R.drawable.ic_rename, getString(R.string.rename), false,
-                () -> askRename(n.file)));
+                () -> askRename(n)));
         rows.add(new Row(R.drawable.ic_share, getString(R.string.share), false,
-                () -> shareDoc(n.file.getUri(), n.name)));
+                () -> shareDoc(n.uri, n.name)));
 
         // 目录不提供删除：这个应用是拿来读写文档的，不该顺手当文件管理器用
         if (!n.isDir) {
             rows.add(new Row(R.drawable.ic_delete, getString(R.string.delete), true,
-                    () -> askDelete(n.file, n.name)));
+                    () -> askDelete(n.uri, n.name)));
         }
         showMenu(rows, anchor);
     }
@@ -610,26 +738,24 @@ public class MainActivity extends Activity {
         showMenu(rows, anchor);
     }
 
-    private void askRename(DocumentFile file) {
-        String current = file.getName();
-        if (current == null) return;
+    private void askRename(Node n) {
         // 扩展名不进输入框：用户改的是名字，格式不该被误删
         showInput(getString(R.string.sheet_title_rename),
-                stripExtension(current), getString(R.string.rename),
-                name -> renameTo(file, name));
+                stripExtension(n.name), getString(R.string.rename),
+                name -> renameTo(n, name));
     }
 
-    private void renameTo(DocumentFile file, String rawName) {
+    private void renameTo(Node n, String rawName) {
         String name = Docs.sanitizeName(rawName);
         if (name.isEmpty()) {
             toast(R.string.rename_failed);
             return;
         }
         if (!name.toLowerCase(Locale.US).endsWith(".md")) name = name + ".md";
-        if (name.equals(file.getName())) return;
+        if (name.equals(n.name)) return;
 
-        String oldUri = file.getUri().toString();
-        if (file.renameTo(name)) {
+        String oldUri = n.uri.toString();
+        if (Docs.rename(this, n.uri, name)) {
             // 最近列表是按 URI 索引的，改名后 URI 变了，但也可能不变；
             // 两种都兜一下，免得列表里还挂着旧名字
             Recents.rename(this, oldUri, name);
@@ -639,13 +765,12 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void askDelete(DocumentFile file, String name) {
+    private void askDelete(Uri uri, String name) {
         List<Row> rows = new ArrayList<>();
         rows.add(new Row(R.drawable.ic_delete, getString(R.string.delete), true, () -> {
-            // 文件可能已经在别处被删掉或改过，先确认拿到的是同一批数据
-            boolean ok = file.exists() && file.delete();
-            if (ok) {
-                Recents.remove(this, file.getUri().toString());
+            // 删不掉的常见原因是文件已经在别处没了，或者授权已经收回
+            if (Docs.delete(this, uri)) {
+                Recents.remove(this, uri.toString());
                 refresh();
             } else {
                 toast(R.string.delete_failed);
@@ -702,13 +827,7 @@ public class MainActivity extends Activity {
 
         v.setOnClickListener(click);
         if (longClick != null) {
-            // 只记落点，不吃事件：点击、长按、滑动的判定原样交给系统
-            v.setOnTouchListener((view, ev) -> {
-                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                    view.setTag(new float[]{ev.getRawX(), ev.getRawY()});
-                }
-                return false;
-            });
+            rememberPress(v);
             v.setOnLongClickListener(longClick);
         }
 
@@ -783,9 +902,12 @@ public class MainActivity extends Activity {
                 float py = point[1] - loc[1];
                 float x = px + gap;
                 float y = py + gap;
-                // 右边放不下就翻到手指左边，下面放不下就翻到上边
-                if (x > maxX) x = px - cw - gap;
-                if (y > maxY) y = py - ch - gap;
+                // 右边放不下就翻到手指左边，下面放不下就翻到上边。
+                // 但只有翻过去真放得下才翻：手指落在屏幕中间时两边都塞不下一张
+                // 卡片，硬翻会把 x 算成负数，最后被钳到屏幕最左边——落点离手指
+                // 十万八千里。这种时候宁可让它贴边，也别翻。
+                if (x > maxX && px - cw - gap >= minX) x = px - cw - gap;
+                if (y > maxY && py - ch - gap >= minY) y = py - ch - gap;
                 x = Math.max(minX, Math.min(x, maxX));
                 y = Math.max(minY, Math.min(y, maxY));
 

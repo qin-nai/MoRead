@@ -28,11 +28,17 @@ public class TreeRow extends LinearLayout {
 
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG);
 
-    private int depth;
+    /**
+     * 这一行画的是哪个节点，以及它在树里的位置。只有 MainActivity 会填：
+     * 展开时要用 depth/mask/last 算出子行该怎么连，收起来时要靠 depth
+     * 判断后面哪些行属于这一支。几个字段是包内可见的，就为了这个。
+     */
+    MainActivity.Node node;
+    int depth;
     /** 第 i 位是 1 ⇒ 在 (i+1)*INDENT 处画一条贯穿整行的竖线（表示那一层还有后续兄弟） */
-    private int mask;
+    int mask;
     private boolean first = true;
-    private boolean last = true;
+    boolean last = true;
     private boolean dir;
 
     public TreeRow(Context context, AttributeSet attrs) {

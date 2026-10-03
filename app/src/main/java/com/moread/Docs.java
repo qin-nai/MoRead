@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.content.UriPermission;
 import android.database.Cursor;
 import android.net.Uri;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 import android.webkit.MimeTypeMap;
 
@@ -291,6 +292,29 @@ public final class Docs {
         while (s.endsWith(".")) s = s.substring(0, s.length() - 1);
         if (s.isEmpty() || ".".equals(s) || "..".equals(s)) return "";
         return s;
+    }
+
+    /**
+     * 改名和删除。
+     *
+     * 这两个动作本来走 DocumentFile 更顺手，但首页那棵树现在只留 URI、不留
+     * DocumentFile（见 MainActivity.walk），所以直接调 DocumentsContract——
+     * DocumentFile.renameTo / delete 底下也就是这两句，绕它一趟还得先造一个对象。
+     */
+    public static boolean rename(Context ctx, Uri uri, String name) {
+        try {
+            return DocumentsContract.renameDocument(ctx.getContentResolver(), uri, name) != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static boolean delete(Context ctx, Uri uri) {
+        try {
+            return DocumentsContract.deleteDocument(ctx.getContentResolver(), uri);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     public static boolean isMarkdown(String name) {
