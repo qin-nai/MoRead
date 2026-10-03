@@ -3,7 +3,7 @@ plugins {
 }
 
 // 版本号只写一处，清单和产物文件名都从这儿取
-def VERSION = '1.0'
+def VERSION = '1.1'
 
 android {
     namespace 'com.moread'
@@ -13,7 +13,8 @@ android {
         applicationId 'com.moread'
         minSdk 26
         targetSdk 35
-        versionCode 1
+        // versionCode 每次发版都得加，安卓只认它来判断「这是不是升级」
+        versionCode 2
         versionName VERSION
     }
 

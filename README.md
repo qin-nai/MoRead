@@ -12,7 +12,7 @@
 
 ## 下载安装
 
-**[⬇ 下载 MoRead-1.0.apk](https://github.com/qin-nai/MoRead/releases/latest)**
+**[⬇ 下载 MoRead-1.1.apk](https://github.com/qin-nai/MoRead/releases/latest)**
 
 用手机点开安装，系统会提示「未知来源应用」，允许即可——这个包没有上架任何应用商店。
 
