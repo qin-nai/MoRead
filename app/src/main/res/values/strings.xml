@@ -7,16 +7,21 @@
     <string name="open_folder">文件夹</string>
     <string name="new_doc">新建</string>
     <string name="section_recent">最近阅读</string>
-    <string name="section_folder">当前文件夹</string>
+    <string name="section_folder">文件夹</string>
     <string name="change_folder">更换</string>
     <string name="go_up">上级</string>
+    <!-- %1$s 根目录名，%2$d 整棵树里的 .md 数 -->
+    <string name="folder_summary">%1$s · %2$d 篇</string>
+    <string name="folder_count">%1$d 篇</string>
+    <string name="folder_reading">正在读取目录…</string>
+    <string name="folder_truncated">目录太大，只读了前面一部分</string>
 
     <string name="sort_by_name">按名称</string>
     <string name="sort_by_time">按时间</string>
 
     <string name="empty_title">还没有打开过文档</string>
     <string name="empty_hint">选一个 .md 文件，或指定一个文件夹——之后就能在里面新建，也能看到文档引用的本地图片</string>
-    <string name="folder_hint">这一层没有 .md 文件</string>
+    <string name="folder_hint">这个文件夹里没有 .md 文件</string>
 
     <string name="new_doc_title">新建文档</string>
     <string name="new_doc_hint">未命名</string>

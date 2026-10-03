@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  文件夹树里的一行。左边距是留给连接线的，宽度由 TreeRow 按层级设，
+  所以这里不写 paddingStart。
+
+  单行不折行：树本来就是用来一眼扫完结构的，每行两行高就白搭了。
+  文件的长短和大小靠右侧那栏元信息，名字截中间。
+
+  layoutDirection 钉死成 ltr：应用声明了 supportsRtl，阿拉伯语环境下框架会把
+  这一行从右往左排，而 TreeRow 的连接线是照绝对左坐标画的，镜像之后线和内容
+  就对不上了。树这个形制本身就是从左往右长的（├ └ 也是），不跟着镜像才对。
+-->
+<com.moread.TreeRow xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layoutDirection="ltr"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_row"
+    android:paddingTop="11dp"
+    android:paddingBottom="11dp"
+    android:paddingEnd="14dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <ImageView
+        android:id="@+id/treeChev"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:src="@drawable/ic_chevron"
+        android:tint="@color/text_3"
+        android:contentDescription="@null" />
+
+    <ImageView
+        android:id="@+id/treeIcon"
+        android:layout_width="19dp"
+        android:layout_height="19dp"
+        android:layout_marginStart="6dp"
+        android:src="@drawable/ic_doc"
+        android:tint="@color/primary_ink"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/treeName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="10dp"
+        android:maxLines="1"
+        android:ellipsize="middle"
+        android:textColor="@color/text"
+        android:textSize="15sp" />
+
+    <TextView
+        android:id="@+id/treeMeta"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:maxLines="1"
+        android:textColor="@color/text_3"
+        android:textSize="11sp" />
+</com.moread.TreeRow>

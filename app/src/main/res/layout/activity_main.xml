@@ -81,21 +81,7 @@
                     android:paddingTop="10dp"
                     android:paddingBottom="6dp">
 
-                    <!-- 不在根目录时才出现 -->
-                    <TextView
-                        android:id="@+id/btnUp"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:paddingEnd="8dp"
-                        android:paddingTop="6dp"
-                        android:paddingBottom="6dp"
-                        android:background="?android:attr/selectableItemBackgroundBorderless"
-                        android:text="↑"
-                        android:textColor="@color/primary_ink"
-                        android:textSize="15sp"
-                        android:visibility="gone" />
-
-                    <!-- 路径。从尾部截断，层级越深越该看得见 -->
+                    <!-- 根目录名 + 整棵树的文档数。树是摊开看的，这里不再显示路径 -->
                     <TextView
                         android:id="@+id/folderName"
                         android:layout_width="0dp"
